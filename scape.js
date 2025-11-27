@@ -1,20 +1,14 @@
-// =======================
-// PARSE THE QUESTION
-// =======================
+// ===== PARSING FUNCTION =====
 function parseQuestion(text) {
-  // Find operator symbol
   const operatorMatch = text.match(/[+\-×÷*/]/);
   if (!operatorMatch) return null;
 
   const operator = operatorMatch[0];
-
-  // Split into left and right numbers
   const [left, right] = text.split(operator).map(s => s.trim());
 
   const a = parseInt(left, 10);
   const b = parseInt(right, 10);
 
-  // Classify math type
   const opType = {
     "+": "addition",
     "-": "subtraction",
@@ -27,31 +21,16 @@ function parseQuestion(text) {
   return { opType, a, b };
 }
 
-
-// =======================
-// CHECK CARRY / BORROW
-// =======================
+// ===== CARRY / BORROW =====
 function carryBorrowInfo(opType, a, b) {
   const aOnes = a % 10;
   const bOnes = b % 10;
-
-  if (opType === "addition") {
-    const carry = (aOnes + bOnes) >= 10;
-    return { carry };
-  }
-
-  if (opType === "subtraction") {
-    const borrow = aOnes < bOnes;
-    return { borrow };
-  }
-
+  if (opType === "addition") return { carry: aOnes + bOnes >= 10 };
+  if (opType === "subtraction") return { borrow: aOnes < bOnes };
   return {};
 }
 
-
-// =======================
-// MULTIPLICATION TABLE CATEGORY
-// =======================
+// ===== MULTIPLICATION / DIVISION TABLE =====
 function tableInfo(opType, a, b) {
   if (opType === "multiplication" || opType === "division") {
     return { tableA: a, tableB: b };
@@ -60,56 +39,61 @@ function tableInfo(opType, a, b) {
 }
 
 
-// =======================
-// MAIN SCRAPING LOGIC
-// =======================
+// ===== MAIN SCRAPING LOGIC =====
 const problemEl = document.querySelector('.problem');
+const answerEl = document.querySelector('.answer');
 
-if (!problemEl) {
-  console.log("Couldn't find problem element! Check the selector.");
+if (!problemEl || !answerEl) {
+  console.log("Couldn't find problem or answer element!");
 } else {
-  window.questions = []; // Accessible globally for debugging
+  window.questions = [];
   let lastTime = performance.now();
   let lastText = problemEl.textContent.trim();
 
-  const observer = new MutationObserver(() => {
+  function handleNewQuestion() {
     const now = performance.now();
-    const text = problemEl.textContent.trim();
+    const newText = problemEl.textContent.trim();
 
-    // Ignore blank or repeated text
-    if (!text || text === lastText) return;
-    lastText = text;
+    if (!newText || newText === lastText) return;
 
-    // Time difference since last question
     const timeTaken = now - lastTime;
     lastTime = now;
 
-    const parsed = parseQuestion(text);
-    if (!parsed) return;
+    const parsed = parseQuestion(lastText);
+    if (parsed) {
+      const entry = {
+        question: lastText,
+        ...parsed,
+        ...carryBorrowInfo(parsed.opType, parsed.a, parsed.b),
+        ...tableInfo(parsed.opType, parsed.a, parsed.b),
+        timeTakenMs: timeTaken
+      };
+      questions.push(entry);
+      console.log("Captured:", entry);
+    }
 
-    const carryBorrow = carryBorrowInfo(parsed.opType, parsed.a, parsed.b);
-    const table = tableInfo(parsed.opType, parsed.a, parsed.b);
+    lastText = newText;
+  }
 
-    const entry = {
-      question: text,
-      ...parsed,
-      ...carryBorrow,
-      ...table,
-      timeTakenMs: timeTaken
-    };
-
-    window.questions.push(entry);
-    console.log("Captured:", entry);
-  });
-
-  observer.observe(problemEl, {
+  // Observe problem text changes
+  const problemObserver = new MutationObserver(handleNewQuestion);
+  problemObserver.observe(problemEl, {
     childList: true,
     subtree: true,
-    characterData: true
+    characterData: true,
   });
 
-  console.log("%cObserver attached. Do a round and watch data collect!",
-              "color: green; font-weight: bold;");
-  console.log("%cView results anytime with: questions",
-              "color: orange;");
+  // Observe input clearing (answer accepted)
+  const inputObserver = new MutationObserver(() => {
+    if (answerEl.value === "") {
+      handleNewQuestion();
+    }
+  });
+  inputObserver.observe(answerEl, {
+    attributes: true,
+    attributeFilter: ["value"],
+  });
+
+  console.log("%cTracking started — solve questions!", "color: green; font-weight: bold;");
+  console.log("%cType `questions` to review captured data", "color: orange;");
 }
