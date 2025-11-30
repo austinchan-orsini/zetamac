@@ -1,0 +1,47 @@
+#zetamac-ui {
+  position: fixed;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(10, 10, 10, 0.95);
+  color: #fff;
+  padding: 10px 15px;
+  border-radius: 12px;
+  z-index: 999999;
+  font-family: Arial, sans-serif;
+  min-width: 325px;
+  text-align: center;
+  user-select: none;
+  border: 2px solid #444;
+  box-shadow: 0 0 8px rgba(0,0,0,0.4);
+}
+
+#zetamac-tabs {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+.zm-tab {
+  flex: 1;
+  padding: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  border-right: 1px solid #444;
+}
+
+.zm-tab:last-child {
+  border-right: none;
+}
+
+.zm-tab.active {
+  font-weight: bold;
+  color: #00eaff;
+}
+
+#zetamac-content {
+  margin-top: 8px;
+  font-size: 12px;
+  text-align: left;
+  min-height: 45px;
+}

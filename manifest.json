@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Zetamac Question Tracker",
+  "version": "1.0",
+  "description": "Detects whenever a new Zetamac question appears.",
+  "permissions": ["activeTab"],
+  "content_scripts": [
+  {
+    "matches": ["https://arithmetic.zetamac.com/*"],
+    "js": ["content.js", "ui.js"],
+    "css": ["ui.css"],
+    "run_at": "document_idle"
+  }
+]
+}
