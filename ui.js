@@ -1,13 +1,14 @@
 // UI state
-let currentTab = "Addition";
-
+let currentTab = "Overview";
+window.lifetimeQuestions = window.lifetimeQuestions || [];
 function createUI() {
   const ui = document.createElement("div");
   ui.id = "zetamac-ui";
   ui.innerHTML = `
     <div id="avgTime">Avg: N/A</div>
     <div id="zetamac-tabs">
-      <div class="zm-tab active" data-tab="Addition">+</div>
+      <div class="zm-tab active" data-tab="Overview">Overview</div>
+      <div class="zm-tab" data-tab="Addition">+</div>
       <div class="zm-tab" data-tab="Subtraction">−</div>
       <div class="zm-tab" data-tab="Multiplication">×</div>
       <div class="zm-tab" data-tab="Division">÷</div>
@@ -15,7 +16,15 @@ function createUI() {
     <div id="zetamac-content">Waiting for stats...</div>
   `;
   document.body.appendChild(ui);
+  // Load historical data from storage
+chrome.storage.local.get("gameHistory", data => {
+  const history = data.gameHistory || [];
 
+  const past = history.flatMap(g => g.solved || []); // <- 'solved', not 'questions'
+  window.lifetimeQuestions = (window.lifetimeQuestions || []).concat(past);
+
+  updateStatsPanel();
+});
   document.querySelectorAll(".zm-tab").forEach(tab => {
     tab.addEventListener("click", () => {
       document.querySelectorAll(".zm-tab")
@@ -32,30 +41,70 @@ function updateStatsPanel() {
   const avgDisplay = document.getElementById("avgTime");
   const contentDisplay = document.getElementById("zetamac-content");
 
-  // If no questions solved yet:
-  if (!window.solvedQuestions || solvedQuestions.length === 0) {
-    avgDisplay.innerText = "Avg Per Question: N/A"; // Keep this
-    contentDisplay.innerText = ""; // ← Don't show "Waiting for stats"
-    return;
+  // Live avg update (even if game hasn't finished)
+  if (!solvedQuestions.length) {
+    avgDisplay.innerText = "Avg Per Question: N/A";
+  } else {
+    const avgTotal = solvedQuestions.reduce((sum, q) => sum + q.time, 0) / solvedQuestions.length;
+    avgDisplay.innerText = `Avg Per Question: ${avgTotal.toFixed(2)}s`;
   }
 
-  // Update overall average live
-  const avgTotal = solvedQuestions.reduce((sum, q) => sum + q.time, 0) / solvedQuestions.length;
-  avgDisplay.innerText = `Avg Per Question: ${avgTotal.toFixed(2)}s`;
+  // Always show stats for active tab
+  if (currentTab === "Overview") {
+    computeOverviewStats().then(html => {
+      contentDisplay.innerHTML = html;
+    });
+  } else {
+    contentDisplay.innerHTML = computeTabStats();
+  }
+}
 
-  // Do NOT show stats until game ends — so leave tab content minimal
-  if (window.gameEnded) {
-  contentDisplay.innerHTML = computeTabStats();
-} else {
-  contentDisplay.innerHTML = `${currentTab} stats coming after game ends 🔍`;
+
+function computeOverviewStats() {
+  if (!chrome || !chrome.storage) return "Storage not available.";
+
+  return new Promise(resolve => {
+    chrome.storage.local.get("gameHistory", data => {
+      const history = data.gameHistory || [];
+
+      const totalGames = history.length;
+
+      if (totalGames === 0) {
+        resolve("No completed games yet.");
+        return;
+      }
+
+      // Sort best → worst by score number
+      const topGames = [...history]
+        .sort((a, b) => {
+          const scoreA = parseInt(a.score.replace("Score: ", "")) || 0;
+          const scoreB = parseInt(b.score.replace("Score: ", "")) || 0;
+          return scoreB - scoreA;
+        })
+        .slice(0, 3);
+
+      let summaryHTML = `
+        <div><strong>Total Games:</strong> ${totalGames}</div>
+        <div><strong>Best Games:</strong></div>
+        <ul>
+      `;
+
+      topGames.forEach((g, i) => {
+        summaryHTML += `
+          <li>#${i + 1}: ${g.score} — Avg ${g.avg.toFixed(2)}s</li>
+        `;
+      });
+
+      summaryHTML += "</ul>";
+
+      resolve(summaryHTML);
+    });
+  });
 }
-}
+
 function computeTabStats() {
-  if (!window.solvedQuestions || solvedQuestions.length === 0)
-    return "No data yet";
-
-  const data = solvedQuestions;
-  let filtered;
+  const data = window.lifetimeQuestions || [];
+  if (!data.length) return "No data yet";
 
   switch (currentTab) {
     case "Addition":
@@ -83,6 +132,8 @@ function computeTabStats() {
 
   return "No data";
 }
+
+
 
 // helper avg formatting
 function avg(arr) {

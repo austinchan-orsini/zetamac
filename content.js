@@ -2,10 +2,29 @@ console.log("Zetamac Tracker Loaded ");
 
 let lastQuestion = null;
 let lastTimestamp = null; // for timing
-let gameEnded = false;
-window.solvedQuestions = [];
+window.lifetimeQuestions = window.lifetimeQuestions || [];
+window.solvedQuestions = window.solvedQuestions || [];
 
 /*************** HELPERS *****************/
+function saveGameHistory() {
+  const gameData = {
+    timestamp: Date.now(),
+    score: findScoreElement()?.textContent?.trim() || null,
+    solved: window.solvedQuestions.slice(), // copy array
+    avg: window.solvedQuestions.length
+      ? window.solvedQuestions.reduce((sum, q) => sum + q.time, 0) / window.solvedQuestions.length
+      : null
+  };
+
+  chrome.storage.local.get(["gameHistory"], (result) => {
+    const history = result.gameHistory || [];
+    history.push(gameData);
+
+    chrome.storage.local.set({ gameHistory: history }, () => {
+      console.log("%cGame saved 📁", "color: lightgreen; font-weight:bold;", gameData);
+    });
+  });
+}
 
 // Parse operator + numbers, handling unicode minus and en dash
 function parseQuestion(q) {
@@ -110,13 +129,28 @@ function formatAndLogQuestion(label, questionText, elapsedSeconds) {
     `${label} A: ${a}, B: ${b}, Operation: ${operationName}, Time: ${timeStr}, ${extraLabel}: ${extraValue}`
   );
 
-  window.solvedQuestions.push({
-    a, b,
-    operation: operationName,
-    time: elapsedSeconds,
-    [extraLabel.toLowerCase()]: extraValue
-  });
-  if (window.updateZetamacUI) updateZetamacUI();
+window.solvedQuestions.push({
+  a,
+  b,
+  operation: operationName,
+  time: elapsedSeconds,
+  [extraLabel.toLowerCase()]: extraValue
+});
+
+window.lifetimeQuestions.push({
+  a,
+  b,
+  operation: operationName,
+  time: elapsedSeconds,
+  // we set all, and the relevant one will be used by filters
+  carry: extraLabel === "Carry" ? extraValue : undefined,
+  borrow: extraLabel === "Borrow" ? extraValue : undefined,
+  table1: extraLabel === "Table1" ? extraValue : undefined,
+  table2: extraLabel === "Table2" ? extraValue : undefined
+});
+
+if (window.updateZetamacUI) window.updateZetamacUI();
+
 }
 
 
@@ -202,6 +236,7 @@ function startObservingGameEnd() {
     console.log(solvedQuestions);
     window.gameEnded = true;
     if (window.updateZetamacUI) updateZetamacUI(); 
+    saveGameHistory();
     const scoreEl = findScoreElement();
     if (scoreEl) {
       console.log(

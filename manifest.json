@@ -3,7 +3,7 @@
   "name": "Zetamac Question Tracker",
   "version": "1.0",
   "description": "Detects whenever a new Zetamac question appears.",
-  "permissions": ["activeTab"],
+  "permissions": ["activeTab", "storage"],
   "content_scripts": [
   {
     "matches": ["https://arithmetic.zetamac.com/*"],
