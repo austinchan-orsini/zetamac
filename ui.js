@@ -1,6 +1,12 @@
 // UI state
 let currentTab = "Overview";
 window.lifetimeQuestions = window.lifetimeQuestions || [];
+function extractScore(game) {
+  if (!game.score) return 0;
+  const match = game.score.match(/\d+/);
+  return match ? parseInt(match[0], 10) : 0;
+}
+
 function createUI() {
   const ui = document.createElement("div");
   ui.id = "zetamac-ui";
@@ -68,7 +74,9 @@ function computeOverviewStats() {
       const history = data.gameHistory || [];
 
       const totalGames = history.length;
-
+      const avgScore = Math.round(
+  history.reduce((sum, g) => sum + extractScore(g), 0) / totalGames
+);
       if (totalGames === 0) {
         resolve("No completed games yet.");
         return;
@@ -76,23 +84,21 @@ function computeOverviewStats() {
 
       // Sort best → worst by score number
       const topGames = [...history]
-        .sort((a, b) => {
-          const scoreA = parseInt(a.score.replace("Score: ", "")) || 0;
-          const scoreB = parseInt(b.score.replace("Score: ", "")) || 0;
-          return scoreB - scoreA;
-        })
-        .slice(0, 3);
+  .sort((a, b) => extractScore(b) - extractScore(a))
+  .slice(0, 3);
 
       let summaryHTML = `
         <div><strong>Total Games:</strong> ${totalGames}</div>
+        <div><strong>Average Score:</strong> ${avgScore}</div>
+
         <div><strong>Best Games:</strong></div>
         <ul>
       `;
 
       topGames.forEach((g, i) => {
         summaryHTML += `
-          <li>#${i + 1}: ${g.score} — Avg ${g.avg.toFixed(2)}s</li>
-        `;
+  <li>#${i + 1}: Score ${extractScore(g)} — Avg ${g.avg?.toFixed(2) ?? "N/A"}s</li>
+`;
       });
 
       summaryHTML += "</ul>";
@@ -144,13 +150,27 @@ function avg(arr) {
 
 // helper table stats (2-12 only)
 function tableStats(data, op, key) {
-  let html = "";
+  const rows = [];
+
   for (let i = 2; i <= 12; i++) {
     const row = data.filter(q => q.operation === op && q[key] === String(i));
-    html += `${i}: ${avg(row)}<br>`;
+    const avgTime = row.length
+      ? row.reduce((s, q) => s + q.time, 0) / row.length
+      : null;
+
+    rows.push({ i, avgTime, text: `${i}: ${avg(row)}` });
   }
-  return html;
+
+  // Sort: slowest (worst) first, fastest last
+  rows.sort((a, b) => {
+    if (a.avgTime === null) return 1;
+    if (b.avgTime === null) return -1;
+    return b.avgTime - a.avgTime;
+  });
+
+  return rows.map(r => r.text).join("<br>");
 }
+
 
 
 // Expose function to content.js

@@ -4,7 +4,7 @@ let lastQuestion = null;
 let lastTimestamp = null; // for timing
 window.lifetimeQuestions = window.lifetimeQuestions || [];
 window.solvedQuestions = window.solvedQuestions || [];
-
+window.gameEnded = false;
 /*************** HELPERS *****************/
 function saveGameHistory() {
   const gameData = {
@@ -227,8 +227,8 @@ function startObservingGameEnd() {
   const timerExpired = secondsLeft <= 0;
   const questionGone = !questionEl || !questionEl.textContent.trim();
 
-  if (!gameEnded && lastQuestion !== null && (timerExpired || questionGone)) {
-    gameEnded = true;
+  if (!window.gameEnded && lastQuestion !== null && (timerExpired || questionGone)) {
+    window.gameEnded = true;
     console.log(
       "%cGAME FINISHED 🛑",
       "color:red; font-size:16px; font-weight:bold;"
