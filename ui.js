@@ -167,34 +167,292 @@ function tableStats(data, op, key) {
 }
 
 function computeFilteredTabStats(data) {
-  if (!data.length) return "No data yet";
+  if (!data.length)
+    return "No data yet";
+
+  const avgMs = arr =>
+    arr.length ? (arr.reduce((s, q) => s + q.time, 0) / arr.length) * 1000 : 0;
+
   switch (currentTab) {
-    case "Addition": return `
-      Avg w/ Carry: ${avg(data.filter(q => q.operation === "Addition" && q.carry === "True"))}<br>
-      Avg w/ no Carry: ${avg(data.filter(q => q.operation === "Addition" && q.carry === "False"))}
-    `;
-    case "Subtraction": return `
-      Avg w/ Borrow: ${avg(data.filter(q => q.operation === "Subtraction" && q.borrow === "True"))}<br>
-      Avg w/ no Borrow: ${avg(data.filter(q => q.operation === "Subtraction" && q.borrow === "False"))}
-    `;
-    case "Multiplication": return tableStats(data, "Multiplication", "table1");
-    case "Division": return tableStats(data, "Division", "table2");
+
+    /* ==========================
+       ADDITION CHART
+    ========================== */
+    case "Addition": {
+      const withCarry = data.filter(q => q.operation === "Addition" && q.carry === "True");
+      const noCarry = data.filter(q => q.operation === "Addition" && q.carry === "False");
+
+      const withCarryAvg = avgMs(withCarry);
+      const noCarryAvg = avgMs(noCarry);
+
+      const canvasId = "addChartCanvas";
+
+      setTimeout(() => {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas || typeof Chart === "undefined") return;
+
+        if (window.addChart) window.addChart.destroy();
+
+        window.addChart = new Chart(canvas.getContext("2d"), {
+          type: "bar",
+          data: {
+            labels: [
+              `With Carry — ${withCarryAvg.toFixed(0)}ms`,
+              `No Carry — ${noCarryAvg.toFixed(0)}ms`
+            ],
+            datasets: [{
+              data: [withCarryAvg, noCarryAvg],
+              borderWidth: 1
+            }]
+          },
+          options: {
+            plugins: { legend: { display: false }},
+            scales: { y: { beginAtZero: true }}
+          }
+        });
+      }, 75);
+
+      return `
+        <div><strong>Addition Performance</strong></div>
+        <div style="margin-top:10px;">
+          <canvas id="${canvasId}" height="140"></canvas>
+        </div>
+      `;
+    }
+
+
+    /* ==========================
+       SUBTRACTION CHART
+    ========================== */
+    case "Subtraction": {
+      const withBorrow = data.filter(q => q.operation === "Subtraction" && q.borrow === "True");
+      const noBorrow = data.filter(q => q.operation === "Subtraction" && q.borrow === "False");
+
+      const withBorrowAvg = avgMs(withBorrow);
+      const noBorrowAvg = avgMs(noBorrow);
+
+      const canvasId = "subChartCanvas";
+
+      setTimeout(() => {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas || typeof Chart === "undefined") return;
+
+        if (window.subChart) window.subChart.destroy();
+
+        window.subChart = new Chart(canvas.getContext("2d"), {
+          type: "bar",
+          data: {
+            labels: [
+              `With Borrow — ${withBorrowAvg.toFixed(0)}ms`,
+              `No Borrow — ${noBorrowAvg.toFixed(0)}ms`
+            ],
+            datasets: [{
+              data: [withBorrowAvg, noBorrowAvg],
+              borderWidth: 1
+            }]
+          },
+          options: {
+            plugins: { legend: { display: false }},
+            scales: { y: { beginAtZero: true }}
+          }
+        });
+      }, 75);
+
+      return `
+        <div><strong>Subtraction Performance</strong></div>
+        <div style="margin-top:10px;">
+          <canvas id="${canvasId}" height="140"></canvas>
+        </div>
+      `;
+    }
+
+
+    case "Multiplication": {
+  const canvasId = "multChartCanvas";
+  
+  const byTable = [];
+  for (let i = 2; i <= 12; i++) {
+    const arr = data.filter(q => q.operation === "Multiplication" && q.table1 === String(i));
+    const avg = arr.length
+      ? (arr.reduce((s, q) => s + q.time, 0) / arr.length) * 1000
+      : null;
+    byTable.push({ label: `x${i}`, avg });
+  }
+
+  // Remove nulls and sort
+  const filtered = byTable.filter(x => x.avg !== null);
+  filtered.sort((a, b) => b.avg - a.avg); // hardest first
+
+  const labels = filtered.map(x => x.label);
+  const values = filtered.map(x => x.avg);
+
+  setTimeout(() => {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || typeof Chart === "undefined") return;
+
+    if (window.multChart) window.multChart.destroy();
+
+    window.multChart = new Chart(canvas.getContext("2d"), {
+      type: "bar",
+      data: {
+        labels: labels,
+        datasets: [{
+          data: values,
+          borderWidth: 1
+        }]
+      },
+      options: {
+        indexAxis: "y", // horizontal bars
+        plugins: { legend: { display: false }},
+        scales: { x: { beginAtZero: true }},
+        responsive: true
+      }
+    });
+  }, 75);
+
+  return `
+    <div><strong>Multiplication Analysis</strong></div>
+    <div style="margin-top:10px;">
+      <canvas id="${canvasId}" height="200"></canvas>
+    </div>
+  `;
+}
+
+
+    case "Division": {
+  const canvasId = "divChartCanvas";
+  
+  const byTable = [];
+  for (let i = 2; i <= 12; i++) {
+    const arr = data.filter(q => q.operation === "Division" && q.table2 === String(i));
+    const avg = arr.length
+      ? (arr.reduce((s, q) => s + q.time, 0) / arr.length) * 1000
+      : null;
+    byTable.push({ label: `÷${i}`, avg });
+  }
+
+  const filtered = byTable.filter(x => x.avg !== null);
+  filtered.sort((a, b) => b.avg - a.avg);
+
+  const labels = filtered.map(x => x.label);
+  const values = filtered.map(x => x.avg);
+
+  setTimeout(() => {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || typeof Chart === "undefined") return;
+
+    if (window.divChart) window.divChart.destroy();
+
+    window.divChart = new Chart(canvas.getContext("2d"), {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [{
+          data: values,
+          borderWidth: 1
+        }]
+      },
+      options: {
+        indexAxis: "y",
+        plugins: { legend: { display: false }},
+        scales: { x: { beginAtZero: true }},
+        responsive: true
+      }
+    });
+  }, 75);
+
+  return `
+    <div><strong>Division Analysis</strong></div>
+    <div style="margin-top:10px;">
+      <canvas id="${canvasId}" height="200"></canvas>
+    </div>
+  `;
+}
+
+
+    default:
+      return "No data";
   }
 }
+
+
 
 /* Main UI Update */
 function updateStatsPanel() {
   const contentDisplay = document.getElementById("zetamac-content");
 
+
   chrome.storage.local.get("gameHistory", data => {
     const history = getFilteredHistory(data.gameHistory || []);
     const dataPoints = history.flatMap(g => g.solved || []);
 
-    if (currentTab === "Overview") {
-      computeOverviewStats(history).then(html => contentDisplay.innerHTML = html);
-      drawScoreChart(history);
-    } else {
-      contentDisplay.innerHTML = computeFilteredTabStats(dataPoints);
+if (currentTab === "Overview") {
+  document.getElementById("scoreChart").style.display = "block";
+  computeOverviewStats(history).then(html => contentDisplay.innerHTML = html);
+  drawScoreChart(history);
+} else {
+  if (scoreChart) {
+    scoreChart.destroy();
+    scoreChart = null;
+  }
+
+  document.getElementById("scoreChart").style.display = "none"; // 🔥 Hide gap
+
+  contentDisplay.innerHTML = computeFilteredTabStats(dataPoints);
+
+  if (currentTab === "Addition") drawAdditionChart(dataPoints);
+  if (currentTab === "Subtraction") drawSubtractionChart(dataPoints);
+  if (currentTab === "Multiplication") drawMultiplicationChart(buildTableRows(dataPoints, "Multiplication", "table1"));
+  if (currentTab === "Division") drawDivisionChart(buildTableRows(dataPoints, "Division", "table2"));
+}
+  });
+}
+function drawAdditionChart(data) {
+  const canvas = document.getElementById("addChart");
+  if (!canvas || typeof Chart === "undefined") return;
+
+  const withCarry = data.filter(q => q.operation === "Addition" && q.carry === "True");
+  const noCarry = data.filter(q => q.operation === "Addition" && q.carry === "False");
+
+  const avg = arr =>
+    arr.length ? (arr.reduce((s,q)=>s+q.time,0) / arr.length) * 1000 : 0;
+
+  new Chart(canvas, {
+    type: "bar",
+    data: {
+      labels: ["With Carry", "No Carry"],
+      datasets: [{
+        data: [avg(withCarry), avg(noCarry)]
+      }]
+    },
+    options: {
+      plugins: { legend: { display: false }},
+      scales: { y: { beginAtZero: true }}
+    }
+  });
+}
+
+function drawSubtractionChart(data) {
+  const canvas = document.getElementById("subChart");
+  if (!canvas || typeof Chart === "undefined") return;
+
+  const withBorrow = data.filter(q => q.operation === "Subtraction" && q.borrow === "True");
+  const noBorrow = data.filter(q => q.operation === "Subtraction" && q.borrow === "False");
+
+  const avg = arr =>
+    arr.length ? (arr.reduce((s,q)=>s+q.time,0) / arr.length) * 1000 : 0;
+
+  new Chart(canvas, {
+    type: "bar",
+    data: {
+      labels: ["With Borrow", "No Borrow"],
+      datasets: [{
+        data: [avg(withBorrow), avg(noBorrow)]
+      }]
+    },
+    options: {
+      plugins: { legend: { display: false }},
+      scales: { y: { beginAtZero: true }}
     }
   });
 }
@@ -204,3 +462,32 @@ window.updateZetamacUI = updateStatsPanel;
 /* Init */
 createUI();
 updateStatsPanel();
+/* -----------------------------------------
+   Draggable UI Panel
+------------------------------------------ */
+(function enableDrag() {
+  const panel = document.getElementById("zetamac-ui");
+  let offsetX = 0, offsetY = 0;
+  let isDragging = false;
+
+  panel.style.position = "fixed"; // ensure fixed position
+
+  panel.addEventListener("mousedown", (e) => {
+    isDragging = true;
+    offsetX = e.clientX - panel.getBoundingClientRect().left;
+    offsetY = e.clientY - panel.getBoundingClientRect().top;
+    panel.style.cursor = "grabbing";
+  });
+
+  document.addEventListener("mousemove", (e) => {
+    if (!isDragging) return;
+    panel.style.left = `${e.clientX - offsetX}px`;
+    panel.style.top  = `${e.clientY - offsetY}px`;
+    panel.style.transform = "none"; // disable center snap
+  });
+
+  document.addEventListener("mouseup", () => {
+    isDragging = false;
+    panel.style.cursor = "grab";
+  });
+})();

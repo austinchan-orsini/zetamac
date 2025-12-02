@@ -9,11 +9,11 @@
   border-radius: 12px;
   z-index: 999999;
   font-family: Arial, sans-serif;
-  min-width: 325px;
-  text-align: center;
-  user-select: none;
-  border: 2px solid #444;
-  box-shadow: 0 0 8px rgba(0,0,0,0.4);
+  min-width: 350px;
+  max-height: 60vh;         /* ⬅ NEW: limits height to 60% of screen */
+  overflow: hidden;         /* ⬅ prevents whole UI from extending */
+  display: flex;
+  flex-direction: column;   /* stack title → tabs → content → chart */
 }
 
 #zetamac-tabs {
@@ -44,4 +44,8 @@
   font-size: 12px;
   text-align: left;
   min-height: 45px;
+}
+
+#zetamac-ui:active {
+  cursor: grabbing;
 }
