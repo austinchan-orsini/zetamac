@@ -1,36 +1,41 @@
-// ------------------------------------------------------------
-// UI State
-// ------------------------------------------------------------
+console.log("UI Loaded + Chart Stable");
+
 let currentTab = "Overview";
 window.lifetimeQuestions = window.lifetimeQuestions || [];
+window.solvedQuestions = window.solvedQuestions || [];
 
-/* Extract numeric score from "Score: X" display */
+let scoreChart = null;
+
+/* Extract numeric score */
 function extractScore(game) {
-  if (!game.score) return 0;
-  const match = game.score.match(/\d+/);
+  const match = game.score?.match(/\d+/);
   return match ? parseInt(match[0], 10) : 0;
 }
 
-/* Return only the most recent N games as selected by user */
+/* Filter history range */
 function getFilteredHistory(history) {
-  const selector = document.getElementById("zm-range");
-  const range = selector ? parseInt(selector.value, 10) : 999999;
+  const range = parseInt(document.getElementById("zm-range")?.value || "999999");
   return history.slice(-range);
 }
 
-/* ------------------------------------------------------------
-   Create and insert UI panel into the page
------------------------------------------------------------- */
+/* UI Panel */
 function createUI() {
+  chrome.storage.local.get("gameHistory", data => {
+  const cleaned = (data.gameHistory || []).filter(g => extractScore(g) > 0);
+  chrome.storage.local.set({ gameHistory: cleaned }, () => {
+    console.log("🧹 Removed zero-score games:", data.gameHistory.length - cleaned.length);
+  });
+});
+
   const ui = document.createElement("div");
   ui.id = "zetamac-ui";
   ui.innerHTML = `
-    <div id="avgTime">Avg: N/A</div>
-
-    <select id="zm-range" style="margin-top:6px; font-size:11px; width:100%;">
-      <option value="1">Past 1 game</option>
+    <h3>Zetamac Stats Tracker</h3>
+    <select id="zm-range" style="margin-top:6px;width:100%;font-size:11px;">
+      <option value="1">Past game</option>
       <option value="10">Past 10 games</option>
-      <option value="100">Past 100 games</option>
+      <option value="25">Past 25 games</option>
+      <option value="50">Past 50 games</option>
       <option value="999999">Lifetime</option>
     </select>
 
@@ -42,99 +47,105 @@ function createUI() {
       <div class="zm-tab" data-tab="Division">÷</div>
     </div>
 
-    <div id="zetamac-content">Waiting for stats...</div>
-  `;
+    <div id="zetamac-content">Loading stats...</div>
 
+    <canvas id="scoreChart" height="150" style="margin-top:10px;"></canvas>
+  `;
   document.body.appendChild(ui);
 
-  // Load historical stored data on startup
   chrome.storage.local.get("gameHistory", data => {
-    const history = data.gameHistory || [];
-    const past = history.flatMap(g => g.solved || []);
-    window.lifetimeQuestions = (window.lifetimeQuestions || []).concat(past);
+    window.lifetimeQuestions.push(...(data.gameHistory || []).flatMap(g => g.solved || []));
     updateStatsPanel();
   });
 
-  /* Tab switching behavior */
   document.querySelectorAll(".zm-tab").forEach(tab => {
     tab.addEventListener("click", () => {
-      document.querySelectorAll(".zm-tab")
-        .forEach(t => t.classList.remove("active"));
-
+      document.querySelectorAll(".zm-tab").forEach(t => t.classList.remove("active"));
       tab.classList.add("active");
       currentTab = tab.dataset.tab;
       updateStatsPanel();
     });
   });
 
-  /* Time window drop-down behavior */
-  document.getElementById("zm-range")
-    .addEventListener("change", updateStatsPanel);
+  document.getElementById("zm-range").addEventListener("change", updateStatsPanel);
 }
 
-/* ------------------------------------------------------------
-   Refresh UI content panel with updated game history information
------------------------------------------------------------- */
-function updateStatsPanel() {
-  const avgDisplay = document.getElementById("avgTime");
-  const contentDisplay = document.getElementById("zetamac-content");
+/* Chart Rendering */
+function drawScoreChart(history) {
+  const canvas = document.getElementById("scoreChart");
+  if (!canvas) return;
+  if (typeof Chart === "undefined") return setTimeout(() => drawScoreChart(history), 200);
 
-  // Update live average time during game
-  if (!solvedQuestions.length) {
-    avgDisplay.innerText = "Avg Per Question: N/A";
-  } else {
-    const avgTotal =
-      solvedQuestions.reduce((sum, q) => sum + q.time, 0) /
-      solvedQuestions.length;
+  if (scoreChart) scoreChart.destroy();
 
-    avgDisplay.innerText = `Avg Per Question: ${avgTotal.toFixed(2)}s`;
-  }
+  const scores = history.map(g => extractScore(g));
+  const labels = history.map((g, i) => `Game ${history.length - scores.length + i + 1}`);
 
-  // Fetch stored history and update results view
-  chrome.storage.local.get("gameHistory", data => {
-    const history = getFilteredHistory(data.gameHistory || []);
-    const dataPoints = history.flatMap(g => g.solved || []);
+  // Running average logic (applies correctly to Past N or Lifetime)
+  const runningAvg = scores.map((_, i) => {
+    const slice = scores.slice(0, i + 1);
+    return slice.reduce((a, b) => a + b, 0) / slice.length;
+  });
 
-    if (currentTab === "Overview") {
-      computeOverviewStats(history).then(html => {
-        contentDisplay.innerHTML = html;
-      });
-    } else {
-      contentDisplay.innerHTML = computeFilteredTabStats(dataPoints);
+  const ctx = canvas.getContext("2d");
+  scoreChart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Score",
+          data: scores,
+          backgroundColor: "rgba(0,180,255,0.6)",
+          yAxisID: "y"
+        },
+        {
+          label: "Running Avg",
+          data: runningAvg,
+          type: "line",
+          borderColor: "orange",
+          borderWidth: 2,
+          tension: 0.25,
+          pointRadius: 3,
+          fill: false,
+          yAxisID: "y"
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        y: { beginAtZero: true }
+      },
+      plugins: {
+        legend: {
+          labels: { color: "white" }
+        }
+      }
     }
   });
 }
 
-/* ------------------------------------------------------------
-   Create HTML summary for Overview tab (top scores, averages)
------------------------------------------------------------- */
+
+/* Compute tab-specific stats */
 function computeOverviewStats(history) {
   return new Promise(resolve => {
-    const totalGames = history.length;
-    if (totalGames === 0) {
-      resolve("No completed games yet.");
-      return;
-    }
+    if (!history.length)
+      return resolve("No completed games yet.");
 
-    const avgScore = Math.round(
-      history.reduce((sum, g) => sum + extractScore(g), 0) / totalGames
-    );
+    const avgScore = Math.round(history.reduce((a, g) => a + extractScore(g), 0) / history.length);
 
-    const topGames = [...history]
-      .sort((a, b) => extractScore(b) - extractScore(a))
-      .slice(0, 3);
+    const topGames = [...history].sort((a, b) => extractScore(b) - extractScore(a)).slice(0, 3);
 
     let html = `
-      <div><strong>Total Games:</strong> ${totalGames}</div>
+      <div><strong>Games:</strong> ${history.length}</div>
       <div><strong>Average Score:</strong> ${avgScore}</div>
-      <div><strong>Best Games:</strong></div>
+      <div><strong>High Scores:</strong></div>
       <ul>
     `;
 
     topGames.forEach((g, i) => {
-      html += `
-        <li>#${i + 1}: Score ${extractScore(g)} — Avg ${g.avg?.toFixed(2) ?? "N/A"}s</li>
-      `;
+      html += `<li>#${i + 1}: Score ${extractScore(g)} — Avg ${(g.avg*1000).toFixed(0)}ms</li>`;
     });
 
     html += "</ul>";
@@ -142,70 +153,54 @@ function computeOverviewStats(history) {
   });
 }
 
-/* ------------------------------------------------------------
-   Compute tab-specific filtered statistics
------------------------------------------------------------- */
-function computeFilteredTabStats(data) {
-  if (!data.length) return "No data yet";
-
-  switch (currentTab) {
-    case "Addition":
-      return `
-        Avg w/ Carry: ${avg(data.filter(q => q.operation === "Addition" && q.carry === "True"))}<br>
-        Avg w/ no Carry: ${avg(data.filter(q => q.operation === "Addition" && q.carry === "False"))}
-      `;
-
-    case "Subtraction":
-      return `
-        Avg w/ Borrow: ${avg(data.filter(q => q.operation === "Subtraction" && q.borrow === "True"))}<br>
-        Avg w/ no Borrow: ${avg(data.filter(q => q.operation === "Subtraction" && q.borrow === "False"))}
-      `;
-
-    case "Multiplication":
-      return tableStats(data, "Multiplication", "table1");
-
-    case "Division":
-      return tableStats(data, "Division", "table2");
-
-    default:
-      return "No data";
-  }
-}
-
-/* Average formatting helper */
 function avg(arr) {
   if (!arr.length) return "N/A";
-  const total = arr.reduce((s, q) => s + q.time, 0);
-  return `${(total / arr.length).toFixed(2)}s`;
+  return `${((arr.reduce((a,b)=>a+b.time,0)/arr.length)*1000).toFixed(0)} ms`;
 }
 
-/* Generate multiplication or division table performance view */
 function tableStats(data, op, key) {
-  const rows = [];
-
-  for (let i = 2; i <= 12; i++) {
-    const row = data.filter(q => q.operation === op && q[key] === String(i));
-    const avgTime = row.length
-      ? row.reduce((s, q) => s + q.time, 0) / row.length
-      : null;
-
-    rows.push({ i, avgTime, text: `${i}: ${avg(row)}` });
-  }
-
-  rows.sort((a, b) => {
-    if (a.avgTime === null) return 1;
-    if (b.avgTime === null) return -1;
-    return b.avgTime - a.avgTime;
-  });
-
-  return rows.map(r => r.text).join("<br>");
+  return [...Array(11)].map((_, i) => {
+    const num = i + 2;
+    const arr = data.filter(q => q.operation === op && q[key] === String(num));
+    return `${num}: ${avg(arr)}`;
+  }).join("<br>");
 }
 
-/* ------------------------------------------------------------
-   Allow content.js to force UI refresh
------------------------------------------------------------- */
+function computeFilteredTabStats(data) {
+  if (!data.length) return "No data yet";
+  switch (currentTab) {
+    case "Addition": return `
+      Avg w/ Carry: ${avg(data.filter(q => q.operation === "Addition" && q.carry === "True"))}<br>
+      Avg w/ no Carry: ${avg(data.filter(q => q.operation === "Addition" && q.carry === "False"))}
+    `;
+    case "Subtraction": return `
+      Avg w/ Borrow: ${avg(data.filter(q => q.operation === "Subtraction" && q.borrow === "True"))}<br>
+      Avg w/ no Borrow: ${avg(data.filter(q => q.operation === "Subtraction" && q.borrow === "False"))}
+    `;
+    case "Multiplication": return tableStats(data, "Multiplication", "table1");
+    case "Division": return tableStats(data, "Division", "table2");
+  }
+}
+
+/* Main UI Update */
+function updateStatsPanel() {
+  const contentDisplay = document.getElementById("zetamac-content");
+
+  chrome.storage.local.get("gameHistory", data => {
+    const history = getFilteredHistory(data.gameHistory || []);
+    const dataPoints = history.flatMap(g => g.solved || []);
+
+    if (currentTab === "Overview") {
+      computeOverviewStats(history).then(html => contentDisplay.innerHTML = html);
+      drawScoreChart(history);
+    } else {
+      contentDisplay.innerHTML = computeFilteredTabStats(dataPoints);
+    }
+  });
+}
+
 window.updateZetamacUI = updateStatsPanel;
 
-/* Initialize UI */
+/* Init */
 createUI();
 updateStatsPanel();

@@ -2,14 +2,19 @@
   "manifest_version": 3,
   "name": "Zetamac Question Tracker",
   "version": "1.0",
-  "description": "Detects whenever a new Zetamac question appears.",
   "permissions": ["activeTab", "storage"],
   "content_scripts": [
-  {
-    "matches": ["https://arithmetic.zetamac.com/*"],
-    "js": ["content.js", "ui.js"],
-    "css": ["ui.css"],
-    "run_at": "document_idle"
-  }
-]
+    {
+      "matches": ["https://arithmetic.zetamac.com/*"],
+      "js": ["chart.js", "content.js", "ui.js"],
+      "css": ["ui.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["chart.js"],
+      "matches": ["https://arithmetic.zetamac.com/*"]
+    }
+  ]
 }

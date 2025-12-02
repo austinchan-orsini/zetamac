@@ -10,9 +10,12 @@ window.gameEnded = false;
    Save the finished game into chrome storage
 ----------------------------------------------------------- */
 function saveGameHistory() {
+  const score = extractScore(findScoreElement()?.textContent?.trim() || "");
+  if (score === 0) return;  // 🚫 Ignore empty games
+
   const gameData = {
     timestamp: Date.now(),
-    score: findScoreElement()?.textContent?.trim() || null,
+    score,
     solved: window.solvedQuestions.map(q => ({
       a: q.a,
       b: q.b,
@@ -36,16 +39,11 @@ function saveGameHistory() {
 
     chrome.storage.local.set({ gameHistory: history }, () => {
       console.log("Game saved", gameData);
-
-      // Force UI to update based on newly stored data
-      if (window.updateZetamacUI) {
-        chrome.storage.local.get("gameHistory", () => {
-          window.updateZetamacUI();
-        });
-      }
+      if (window.updateZetamacUI) window.updateZetamacUI();
     });
   });
 }
+
 
 /* -----------------------------------------------------------
    Handle question text parsing and metadata extraction
