@@ -10,12 +10,15 @@ window.gameEnded = false;
    Save the finished game into chrome storage
 ----------------------------------------------------------- */
 function saveGameHistory() {
-  const score = extractScore(findScoreElement()?.textContent?.trim() || "");
-  if (score === 0) return;  // 🚫 Ignore empty games
+  const scoreText = findScoreElement()?.textContent?.trim() || "";
+  const match = scoreText.match(/\d+/);
+  const score = match ? parseInt(match[0], 10) : 0;
+
+  if (score === 0) return;  // ignore empty games
 
   const gameData = {
     timestamp: Date.now(),
-    score,
+    score,  // numeric
     solved: window.solvedQuestions.map(q => ({
       a: q.a,
       b: q.b,
@@ -43,6 +46,7 @@ function saveGameHistory() {
     });
   });
 }
+
 
 
 /* -----------------------------------------------------------

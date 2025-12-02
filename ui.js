@@ -8,9 +8,17 @@ let scoreChart = null;
 
 /* Extract numeric score */
 function extractScore(game) {
-  const match = game.score?.match(/\d+/);
+  if (game == null) return 0;
+
+  // if called as extractScore(gameObj)
+  // or extractScore("Score: 7") or extractScore(7)
+  const raw = typeof game === "object" ? game.score : game;
+
+  const text = String(raw ?? "");        // <-- always a string now
+  const match = text.match(/\d+/);
   return match ? parseInt(match[0], 10) : 0;
 }
+
 
 /* Filter history range */
 function getFilteredHistory(history) {
