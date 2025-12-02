@@ -1,34 +1,56 @@
-console.log("Zetamac Tracker Loaded ");
+console.log("Zetamac Tracker Loaded");
 
 let lastQuestion = null;
-let lastTimestamp = null; // for timing
+let lastTimestamp = null;
 window.lifetimeQuestions = window.lifetimeQuestions || [];
 window.solvedQuestions = window.solvedQuestions || [];
 window.gameEnded = false;
-/*************** HELPERS *****************/
+
+/* -----------------------------------------------------------
+   Save the finished game into chrome storage
+----------------------------------------------------------- */
 function saveGameHistory() {
   const gameData = {
     timestamp: Date.now(),
     score: findScoreElement()?.textContent?.trim() || null,
-    solved: window.solvedQuestions.slice(), // copy array
+    solved: window.solvedQuestions.map(q => ({
+      a: q.a,
+      b: q.b,
+      operation: q.operation,
+      time: q.time,
+      carry: q.carry,
+      borrow: q.borrow,
+      table1: q.table1,
+      table2: q.table2
+    })),
+    duration: window.solvedQuestions.reduce((sum, q) => sum + q.time, 0),
     avg: window.solvedQuestions.length
-      ? window.solvedQuestions.reduce((sum, q) => sum + q.time, 0) / window.solvedQuestions.length
+      ? window.solvedQuestions.reduce((sum, q) => sum + q.time, 0) /
+        window.solvedQuestions.length
       : null
   };
 
-  chrome.storage.local.get(["gameHistory"], (result) => {
+  chrome.storage.local.get(["gameHistory"], result => {
     const history = result.gameHistory || [];
     history.push(gameData);
 
     chrome.storage.local.set({ gameHistory: history }, () => {
-      console.log("%cGame saved 📁", "color: lightgreen; font-weight:bold;", gameData);
+      console.log("Game saved", gameData);
+
+      // Force UI to update based on newly stored data
+      if (window.updateZetamacUI) {
+        chrome.storage.local.get("gameHistory", () => {
+          window.updateZetamacUI();
+        });
+      }
     });
   });
 }
 
-// Parse operator + numbers, handling unicode minus and en dash
+/* -----------------------------------------------------------
+   Handle question text parsing and metadata extraction
+----------------------------------------------------------- */
 function parseQuestion(q) {
-  // includes Unicode minus "−" and en dash "–"
   const ops = ["+", "−", "–", "-", "×", "÷", "*", "/"];
   const rawOp = ops.find(op => q.includes(op));
   if (!rawOp) return null;
@@ -40,16 +62,17 @@ function parseQuestion(q) {
   const b = parseInt(parts[1].replace("=", "").trim(), 10);
   if (Number.isNaN(a) || Number.isNaN(b)) return null;
 
-  // normalize operator
   let op = rawOp;
-  if (rawOp === "*" ) op = "×";
-  if (rawOp === "/" ) op = "÷";
+  if (rawOp === "*") op = "×";
+  if (rawOp === "/") op = "÷";
   if (rawOp === "−" || rawOp === "–" || rawOp === "-") op = "-";
 
   return { a, b, op };
 }
 
-// full multi-digit carry/borrow
+/* -----------------------------------------------------------
+   Determine carry or borrow for + or -
+----------------------------------------------------------- */
 function needsCarryBorrow(op, a, b) {
   if (op !== "+" && op !== "-") return false;
 
@@ -83,21 +106,12 @@ function needsCarryBorrow(op, a, b) {
   return false;
 }
 
-// whether this is a times-table fact
-// × → row is A; ÷ → row is B
-function isTimesTable(op, a, b) {
-  if (op === "×") return a >= 2 && a <= 12;
-  if (op === "÷") return b >= 2 && b <= 12;
-  return false;
-}
-
-// make the label strings you want
+/* -----------------------------------------------------------
+   Log question statistics each time the question changes
+----------------------------------------------------------- */
 function formatAndLogQuestion(label, questionText, elapsedSeconds) {
   const parsed = parseQuestion(questionText);
-  if (!parsed) {
-    console.log(label, "could not parse:", questionText);
-    return;
-  }
+  if (!parsed) return;
 
   const { a, b, op } = parsed;
 
@@ -123,41 +137,33 @@ function formatAndLogQuestion(label, questionText, elapsedSeconds) {
     extraValue = (b >= 2 && b <= 12) ? String(b) : "None";
   }
 
-  const timeStr = `${elapsedSeconds.toFixed(2)}s`;
+  window.solvedQuestions.push({
+    a,
+    b,
+    operation: operationName,
+    time: elapsedSeconds,
+    [extraLabel.toLowerCase()]: extraValue
+  });
 
-  console.log(
-    `${label} A: ${a}, B: ${b}, Operation: ${operationName}, Time: ${timeStr}, ${extraLabel}: ${extraValue}`
-  );
+  window.lifetimeQuestions.push({
+    a,
+    b,
+    operation: operationName,
+    time: elapsedSeconds,
+    carry: extraLabel === "Carry" ? extraValue : undefined,
+    borrow: extraLabel === "Borrow" ? extraValue : undefined,
+    table1: extraLabel === "Table1" ? extraValue : undefined,
+    table2: extraLabel === "Table2" ? extraValue : undefined
+  });
 
-window.solvedQuestions.push({
-  a,
-  b,
-  operation: operationName,
-  time: elapsedSeconds,
-  [extraLabel.toLowerCase()]: extraValue
-});
-
-window.lifetimeQuestions.push({
-  a,
-  b,
-  operation: operationName,
-  time: elapsedSeconds,
-  // we set all, and the relevant one will be used by filters
-  carry: extraLabel === "Carry" ? extraValue : undefined,
-  borrow: extraLabel === "Borrow" ? extraValue : undefined,
-  table1: extraLabel === "Table1" ? extraValue : undefined,
-  table2: extraLabel === "Table2" ? extraValue : undefined
-});
-
-if (window.updateZetamacUI) window.updateZetamacUI();
-
+  if (window.updateZetamacUI) window.updateZetamacUI();
 }
 
-
-/*************** QUESTION WATCHER *****************/
+/* -----------------------------------------------------------
+   Watch for question changes during the game
+----------------------------------------------------------- */
 function startObservingQuestions() {
   const questionElement = document.querySelector(".problem");
-
   if (!questionElement) {
     requestAnimationFrame(startObservingQuestions);
     return;
@@ -165,11 +171,6 @@ function startObservingQuestions() {
 
   const initialText = questionElement.textContent.trim();
   if (initialText && lastQuestion === null) {
-    console.log(
-      "%cInitial Question ➜",
-      "color: cyan; font-weight:bold;",
-      initialText
-    );
     lastQuestion = initialText;
     lastTimestamp = performance.now();
   }
@@ -178,18 +179,11 @@ function startObservingQuestions() {
     const newQ = questionElement.textContent.trim();
 
     if (newQ && newQ !== lastQuestion) {
-      // log the previous question with all metadata
       if (lastQuestion && lastTimestamp) {
         const elapsed = (performance.now() - lastTimestamp) / 1000;
         formatAndLogQuestion("Q:", lastQuestion, elapsed);
       }
 
-      console.log(
-        "%cNew Question ➜",
-        "color: yellow; font-weight:bold;",
-        newQ
-      );
-      
       lastQuestion = newQ;
       lastTimestamp = performance.now();
     }
@@ -198,15 +192,14 @@ function startObservingQuestions() {
   observer.observe(questionElement, { childList: true, subtree: true });
 }
 
-/*************** GAME END WATCHER *****************/
-
+/* -----------------------------------------------------------
+   Detect the end of a game and trigger saving
+----------------------------------------------------------- */
 function findScoreElement() {
   const all = document.querySelectorAll("body *");
   for (const el of all) {
     const text = el.textContent.trim();
-    if (text.startsWith("Score:")) {
-      return el;
-    }
+    if (text.startsWith("Score:")) return el;
   }
   return null;
 }
@@ -216,12 +209,9 @@ function startObservingGameEnd() {
   const questionEl = document.querySelector(".problem");
 
   let secondsLeft = Infinity;
-
   if (timerEl) {
     const match = timerEl.textContent.match(/Seconds left:\s*(-?\d+)/);
-    if (match) {
-      secondsLeft = parseInt(match[1], 10);
-    }
+    if (match) secondsLeft = parseInt(match[1], 10);
   }
 
   const timerExpired = secondsLeft <= 0;
@@ -229,37 +219,17 @@ function startObservingGameEnd() {
 
   if (!window.gameEnded && lastQuestion !== null && (timerExpired || questionGone)) {
     window.gameEnded = true;
-    console.log(
-      "%cGAME FINISHED 🛑",
-      "color:red; font-size:16px; font-weight:bold;"
-    );
-    console.log(solvedQuestions);
-    window.gameEnded = true;
-    if (window.updateZetamacUI) updateZetamacUI(); 
     saveGameHistory();
-    const scoreEl = findScoreElement();
-    if (scoreEl) {
-      console.log(
-        "%cFinal Score ➜",
-        "color: orange; font-weight:bold;",
-        scoreEl.textContent.trim()
-      );
-    } else {
-      console.log(
-        "%cFinal Score ➜ Unable to detect score element.",
-        "color: orange;"
-      );
-    }
-
     return;
   }
 
   requestAnimationFrame(startObservingGameEnd);
 }
 
-/*************** INIT *****************/
+/* -----------------------------------------------------------
+   Initialize event watchers
+----------------------------------------------------------- */
 function init() {
-  console.log("Waiting for game to start...");
   startObservingQuestions();
   startObservingGameEnd();
 }
