@@ -158,7 +158,6 @@ function formatAndLogQuestion(label, questionText, elapsedSeconds) {
     table2: extraLabel === "Table2" ? extraValue : undefined
   });
 
-  if (window.updateZetamacUI) window.updateZetamacUI();
 }
 
 /* -----------------------------------------------------------

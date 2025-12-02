@@ -44,7 +44,7 @@ function createUI() {
       <option value="10">Past 10 games</option>
       <option value="25">Past 25 games</option>
       <option value="50">Past 50 games</option>
-      <option value="999999">Lifetime</option>
+      <option value="999999" selected>Lifetime</option>
     </select>
 
     <div id="zetamac-tabs">
@@ -275,107 +275,82 @@ function computeFilteredTabStats(data) {
     }
 
 
-    case "Multiplication": {
-  const canvasId = "multChartCanvas";
-  
-  const byTable = [];
+case "Multiplication": {
+  const segments = [];
   for (let i = 2; i <= 12; i++) {
     const arr = data.filter(q => q.operation === "Multiplication" && q.table1 === String(i));
-    const avg = arr.length
-      ? (arr.reduce((s, q) => s + q.time, 0) / arr.length) * 1000
-      : null;
-    byTable.push({ label: `x${i}`, avg });
+    if (!arr.length) continue;
+    const avgMs = (arr.reduce((s, q) => s + q.time, 0) / arr.length) * 1000;
+    segments.push({ label: `x${i}`, avg: avgMs });
   }
 
-  // Remove nulls and sort
-  const filtered = byTable.filter(x => x.avg !== null);
-  filtered.sort((a, b) => b.avg - a.avg); // hardest first
+  segments.sort((a, b) => b.avg - a.avg);
+  const maxAvg = Math.max(...segments.map(s => s.avg));
 
-  const labels = filtered.map(x => x.label);
-  const values = filtered.map(x => x.avg);
-
-  setTimeout(() => {
-    const canvas = document.getElementById(canvasId);
-    if (!canvas || typeof Chart === "undefined") return;
-
-    if (window.multChart) window.multChart.destroy();
-
-    window.multChart = new Chart(canvas.getContext("2d"), {
-      type: "bar",
-      data: {
-        labels: labels,
-        datasets: [{
-          data: values,
-          borderWidth: 1
-        }]
-      },
-      options: {
-        indexAxis: "y", // horizontal bars
-        plugins: { legend: { display: false }},
-        scales: { x: { beginAtZero: true }},
-        responsive: true
-      }
-    });
-  }, 75);
-
-  return `
+  const html = `
     <div><strong>Multiplication Analysis</strong></div>
+    <div>Difficulty by Table (2–12)</div>
     <div style="margin-top:10px;">
-      <canvas id="${canvasId}" height="200"></canvas>
+      ${segments.map(s => {
+        const percent = (s.avg / maxAvg) * 100;
+        const cls = s.avg > 3500 ? "bar-bad"
+                : s.avg > 2500 ? "bar-medium"
+                : "bar-good";
+        return `
+          <div class="zm-bar-row">
+            <div class="zm-bar-label">${s.label}</div>
+            <div class="zm-bar ${cls}" style="width:${percent}%"></div>
+            <div class="zm-bar-value">${Math.round(s.avg)}ms</div>
+          </div>
+        `;
+      }).join("")}
     </div>
   `;
+  return html;
 }
 
 
-    case "Division": {
-  const canvasId = "divChartCanvas";
-  
-  const byTable = [];
+
+case "Division": {
+  const segments = [];
+
   for (let i = 2; i <= 12; i++) {
     const arr = data.filter(q => q.operation === "Division" && q.table2 === String(i));
-    const avg = arr.length
-      ? (arr.reduce((s, q) => s + q.time, 0) / arr.length) * 1000
-      : null;
-    byTable.push({ label: `÷${i}`, avg });
+    if (!arr.length) continue;
+
+    const avgMs = (arr.reduce((s, q) => s + q.time, 0) / arr.length) * 1000;
+    segments.push({ label: `÷${i}`, avg: avgMs });
   }
 
-  const filtered = byTable.filter(x => x.avg !== null);
-  filtered.sort((a, b) => b.avg - a.avg);
+  if (!segments.length) return "No data yet.";
 
-  const labels = filtered.map(x => x.label);
-  const values = filtered.map(x => x.avg);
+  segments.sort((a, b) => b.avg - a.avg);
+  const maxAvg = Math.max(...segments.map(s => s.avg));
 
-  setTimeout(() => {
-    const canvas = document.getElementById(canvasId);
-    if (!canvas || typeof Chart === "undefined") return;
-
-    if (window.divChart) window.divChart.destroy();
-
-    window.divChart = new Chart(canvas.getContext("2d"), {
-      type: "bar",
-      data: {
-        labels,
-        datasets: [{
-          data: values,
-          borderWidth: 1
-        }]
-      },
-      options: {
-        indexAxis: "y",
-        plugins: { legend: { display: false }},
-        scales: { x: { beginAtZero: true }},
-        responsive: true
-      }
-    });
-  }, 75);
-
-  return `
+  const html = `
     <div><strong>Division Analysis</strong></div>
+    <div>Difficulty by Table (2–12)</div>
     <div style="margin-top:10px;">
-      <canvas id="${canvasId}" height="200"></canvas>
+      ${segments.map(s => {
+        const percent = (s.avg / maxAvg) * 100;
+        const cls = s.avg > 3500 ? "bar-bad"
+                : s.avg > 2500 ? "bar-medium"
+                : "bar-good";
+        return `
+          <div class="zm-bar-row">
+            <div class="zm-bar-label">${s.label}</div>
+            <div class="zm-bar-bg">
+              <div class="zm-bar ${cls}" style="width:${percent}%"></div>
+            </div>
+            <div class="zm-bar-value">${Math.round(s.avg)}ms</div>
+          </div>
+        `;
+      }).join("")}
     </div>
   `;
+  return html;
 }
+
 
 
     default:
