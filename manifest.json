@@ -1,8 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "Zetamac Question Tracker",
-  "version": "1.0",
-  "permissions": ["activeTab", "storage"],
+  "name": "Zetamac Stats Tracker",
+  "version": "1.0.0",
+  "description": "Track your arithmetic speed and analyze performance with detailed statistics and visualizations for Zetamac arithmetic game.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://arithmetic.zetamac.com/*"
+  ],
   "content_scripts": [
     {
       "matches": ["https://arithmetic.zetamac.com/*"],
@@ -11,10 +15,17 @@
       "run_at": "document_idle"
     }
   ],
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
   "web_accessible_resources": [
     {
       "resources": ["chart.js"],
       "matches": ["https://arithmetic.zetamac.com/*"]
     }
-  ]
+  ],
+  "author": "Austin Chan-Orsini",
+  "homepage_url": "https://github.com/austinchan-orsini/zetamac"
 }
